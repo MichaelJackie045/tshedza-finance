@@ -1,0 +1,62 @@
+# Tshedza Finance API config.
+# Frontend (Vite :5173) calls this server (:8080) via /api proxy — see frontend/vite.config.ts.
+
+server:
+  # Render (and most PaaS) inject PORT; default 8080 for local.
+  port: ${PORT:8080}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: tshedza-backend
+  datasource:
+    # Local H2 file DB (entities in za.co.tshedza.*). Demo users seeded by DataInitializer.
+    url: jdbc:h2:file:./data/tshedza;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  servlet:
+    multipart:
+      # Matches DocumentsStep / useDocumentUpload 8MB client check
+      max-file-size: 8MB
+      max-request-size: 10MB
+
+app:
+  jwt:
+    # Used by JwtService (issue) + JwtAuthenticationFilter (validate); frontend only stores the token
+    # Override with APP_JWT_SECRET in production.
+    secret: ${APP_JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration: 86400000 # 24 hours
+  upload-dir: ${APP_UPLOAD_DIR:./uploads} # ApplicationService document storage
+  # Comma-separated browser origins (local Vite + Vercel). Override with CORS_ALLOWED_ORIGINS.
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  # Keep aligned with frontend/src/lib/loanCalc.ts INTEREST_RATE_MONTHLY
+  interest-rate: 0.035
+  loan-min: 100
+  loan-max: 20000
+  # PayFast sandbox — your test merchant (override with PAYFAST_* env vars)
+  payfast:
+    sandbox: ${PAYFAST_SANDBOX:true}
+    merchant-id: ${PAYFAST_MERCHANT_ID:10052864}
+    merchant-key: ${PAYFAST_MERCHANT_KEY:hwodkhln4atmc}
+    passphrase: ${PAYFAST_PASSPHRASE:hwodkhln4atmc}
+    return-url: ${PAYFAST_RETURN_URL:http://localhost:5173/dashboard/repayments/return}
+    cancel-url: ${PAYFAST_CANCEL_URL:http://localhost:5173/dashboard/repayments/cancel}
+    notify-url: ${PAYFAST_NOTIFY_URL:http://localhost:8080/api/payments/payfast/notify}
+  # Resend email (free tier). Leave RESEND_API_KEY empty to no-op locally.
+  notify:
+    resend-api-key: ${RESEND_API_KEY:}
+    from-email: ${NOTIFY_FROM_EMAIL:onboarding@resend.dev}
+    from-name: Tshedza Finance
+    ops-email: ${NOTIFY_OPS_EMAIL:jackiemichael045@gmail.com}

@@ -1,0 +1,16 @@
+.tools/
+backend/.env.notify
+backend/.env
+backend/.env.payfast
+backend/data/
+backend/uploads/
+**/target/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.production.local
+.env.developmet
+.idea/
+*.iml
+.DS_Store
