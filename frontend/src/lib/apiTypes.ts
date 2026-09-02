@@ -42,7 +42,7 @@ export type Payment = {
   date: string
   amount: number
   method: string
-  status: string
+  status: 'active' | 'approved' | 'paid' | 'cleared' | 'pending' | 'upcoming' | 'overdue'
 }
 
 export type UserRole = 'USER' | 'ADMIN'

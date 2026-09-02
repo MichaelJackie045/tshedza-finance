@@ -1,0 +1,52 @@
+# Tshedza Finance — local full stack
+# UI:  http://localhost:5173
+# API: http://localhost:8080 (also via http://localhost:5173/api)
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/uploads
+    env_file:
+      - path: ./backend/.env.notify
+        required: false
+    environment:
+      PORT: "8080"
+      APP_UPLOAD_DIR: /app/uploads
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      NOTIFY_FROM_EMAIL: ${NOTIFY_FROM_EMAIL:-onboarding@resend.dev}
+      NOTIFY_OPS_EMAIL: ${NOTIFY_OPS_EMAIL:-}
+      PAYFAST_SANDBOX: ${PAYFAST_SANDBOX:-true}
+      PAYFAST_MERCHANT_ID: ${PAYFAST_MERCHANT_ID:-}
+      PAYFAST_MERCHANT_KEY: ${PAYFAST_MERCHANT_KEY:-}
+      PAYFAST_PASSPHRASE: ${PAYFAST_PASSPHRASE:-}
+      PAYFAST_RETURN_URL: ${PAYFAST_RETURN_URL:-http://localhost:5173/dashboard/repayments/return}
+      PAYFAST_CANCEL_URL: ${PAYFAST_CANCEL_URL:-http://localhost:5173/dashboard/repayments/cancel}
+      PAYFAST_NOTIFY_URL: ${PAYFAST_NOTIFY_URL:-http://localhost:8080/api/payments/payfast/notify}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  backend_data:
+  backend_uploads:

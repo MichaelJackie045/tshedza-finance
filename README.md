@@ -38,7 +38,30 @@ Typical happy path: **Register/Login → Apply (create + docs + submit) → Admi
 - Node.js 20+
 - Java 21+
 
-### 1. Run the Backend
+**Or** Docker Desktop / Docker Engine + Compose (no local Java/Node needed).
+
+### Docker (recommended for a quick run)
+
+From the project root:
+
+```bash
+# Optional: copy env overrides (JWT, Resend, PayFast)
+cp .env.docker.example .env
+
+docker compose up --build
+```
+
+- UI: http://localhost:5173  
+- API: http://localhost:8080 (also proxied at http://localhost:5173/api)  
+- H2 console: http://localhost:8080/h2-console  
+
+Stop with `Ctrl+C`, or `docker compose down`. Data and uploads persist in named volumes (`backend_data`, `backend_uploads`).
+
+Email keys can also live in `backend/.env.notify` (Compose loads it when present).
+
+### Local (without Docker)
+
+#### 1. Run the Backend
 
 ```bash
 cd backend
@@ -49,7 +72,7 @@ The API will be available at `http://localhost:8080`.
 The database is a local H2 file at `backend/data/tshedza`.
 H2 Console: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:file:./data/tshedza`, User: `sa`, Password: `password`).
 
-### 2. Run the Frontend
+#### 2. Run the Frontend
 
 ```bash
 cd frontend

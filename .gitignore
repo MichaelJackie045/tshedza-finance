@@ -11,6 +11,8 @@ frontend/.env
 frontend/.env.local
 frontend/.env.production.local
 .env.developmet
+.env
+!.env.docker.example
 .idea/
 *.iml
 .DS_Store
