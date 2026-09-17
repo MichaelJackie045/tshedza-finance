@@ -131,18 +131,31 @@ Emails are sent on: contact form, application submit, approve/decline, repayment
 
 Personal repo: push to GitHub, then connect both hosts to the same repo (not a work org).
 
-### Backend — [Render](https://render.com) Web Service
+### Backend — [Render](https://render.com) Web Service (Docker)
+
+Use **Docker** (not Node). Easiest settings with the **repo-root** [`Dockerfile`](Dockerfile):
+
+| Setting | Value |
+| --- | --- |
+| Language / Runtime | **Docker** |
+| Root Directory | *(leave empty)* |
+| Dockerfile Path | `./Dockerfile` or `Dockerfile` |
+| Docker Build Context | `.` (repo root) |
+| Health Check Path | *(leave empty)* |
+
+Alternative (build only `backend/`):
 
 | Setting | Value |
 | --- | --- |
 | Root Directory | `backend` |
-| Build Command | `./mvnw -DskipTests package` |
-| Start Command | `java -jar target/backend-0.0.1-SNAPSHOT.jar` |
+| Dockerfile Path | `Dockerfile` |
+
+There is also a [`render.yaml`](render.yaml) blueprint.
 
 Set env vars from [`backend/.env.deploy.example`](backend/.env.deploy.example). At minimum:
 
 - `APP_JWT_SECRET` — long random string  
-- `APP_UPLOAD_DIR=/tmp/uploads`  
+- `APP_UPLOAD_DIR=/app/uploads`  
 - `CORS_ALLOWED_ORIGINS` — include your Vercel URL, e.g. `https://YOUR-APP.vercel.app,http://localhost:5173,http://127.0.0.1:5173`
 
 `PORT` is set by Render; `application.yml` reads `${PORT:8080}`.

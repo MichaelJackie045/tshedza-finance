@@ -1,0 +1,20 @@
+.git
+.tools
+frontend
+files (1)
+scripts
+*.md
+smoke-api.mjs
+docker-compose.yml
+.env
+.env.*
+backend/target
+backend/data
+backend/uploads
+backend/.env
+backend/.env.notify
+backend/.env.payfast
+backend/.env.deploy
+**/.idea
+**/*.iml
+.DS_Store
