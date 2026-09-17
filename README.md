@@ -167,9 +167,11 @@ Set env vars from [`backend/.env.deploy.example`](backend/.env.deploy.example). 
 | Root Directory | `frontend` |
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
-| Env | `VITE_API_URL=https://YOUR-API.onrender.com/api` |
+| Env (optional) | `VITE_API_URL=https://tshedza-finance.onrender.com/api` |
 
-SPA routing is handled by [`frontend/vercel.json`](frontend/vercel.json). Redeploy the frontend after changing any `VITE_*` variable.
+[`frontend/vercel.json`](frontend/vercel.json) proxies `/api/*` to the Render backend and handles SPA routing, so keeping `VITE_API_URL=/api` also works after deploy.
+
+If you set an absolute `VITE_*` URL instead, also add your Vercel origin to Render `CORS_ALLOWED_ORIGINS`, then redeploy the API.
 
 ---
 
