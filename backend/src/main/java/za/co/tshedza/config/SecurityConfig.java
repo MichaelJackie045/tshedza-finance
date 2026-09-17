@@ -70,13 +70,21 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        // Always allow local Vite + production Vercel, then merge any CORS_ALLOWED_ORIGINS values.
+        java.util.LinkedHashSet<String> origins = new java.util.LinkedHashSet<>();
+        origins.add("http://localhost:5173");
+        origins.add("http://127.0.0.1:5173");
+        origins.add("https://tshedza-finance.vercel.app");
+        Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .toList();
+                .forEach(origins::add);
+
+        org.slf4j.LoggerFactory.getLogger(SecurityConfig.class)
+                .info("CORS allowed origins: {}", origins);
 
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(origins);
+        configuration.setAllowedOrigins(origins.stream().toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));
