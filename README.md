@@ -167,11 +167,11 @@ Set env vars from [`backend/.env.deploy.example`](backend/.env.deploy.example). 
 | Root Directory | `frontend` |
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
-| Env (optional) | `VITE_API_URL=https://tshedza-finance.onrender.com/api` |
+| Env | Prefer leaving unset — [`frontend/.env.production`](frontend/.env.production) already sets `VITE_API_URL` to Render |
 
-[`frontend/vercel.json`](frontend/vercel.json) proxies `/api/*` to the Render backend and handles SPA routing, so keeping `VITE_API_URL=/api` also works after deploy.
+After deploy, the browser must call `https://tshedza-finance.onrender.com/api/...` (not `…vercel.app/api/...`). Check DevTools → Network.
 
-If you set an absolute `VITE_*` URL instead, also add your Vercel origin to Render `CORS_ALLOWED_ORIGINS`, then redeploy the API.
+On Render, set `CORS_ALLOWED_ORIGINS` to include `https://tshedza-finance.vercel.app` (defaults in `application.yml` already include it after the latest push).
 
 ---
 
