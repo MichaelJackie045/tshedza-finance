@@ -1,6 +1,6 @@
-# Render-friendly Dockerfile (build context = repository root).
-# Prefer Root Directory=backend + backend/Dockerfile when possible;
-# this file exists so a default "Dockerfile" path at repo root still works.
+# Retired: Spring Boot API on Render.
+# Backend is now Supabase. Prefer deploying Edge Functions + Postgres via the Supabase CLI.
+# This Dockerfile remains only for historical reference of the old Java service.
 
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app

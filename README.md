@@ -4,75 +4,74 @@ A full-stack short-term microfinance web platform.
 
 ## Features
 
-- **Auth**: JWT-based login and registration.
-- **Applications**: 5-step loan application flow with document uploads.
-- **Dashboard**: Manage active loans, view repayment schedules, and make payments.
-- **Transfers**: Send money cross-border to Zimbabwe, Mozambique, Lesotho, and Botswana.
-- **Debt Review**: Informational flow and consultation request.
+- **Auth**: Supabase Auth (email/password) with profile roles (`USER` / `ADMIN`).
+- **Applications**: 5-step loan application flow with document uploads to Storage.
+- **Dashboard**: Active loans, repayment schedules, PayFast (or demo EFT) payments.
+- **Transfers**: Cross-border transfer requests (ZW / MZ / LS / BW).
+- **Debt Review**: Consultation request form.
+- **Admin**: Approve/decline applications (creates loans via Edge Function).
 
 ## Stack
 
-- **Frontend**: React 19, Vite, Tailwind CSS 4, TanStack Query, Zustand, Axios.
-- **Backend**: Java 21, Spring Boot 3.3, Spring Security, Spring Data JPA, H2 Database.
+| Layer | Tech |
+| --- | --- |
+| Frontend | React 19, Vite, Tailwind CSS 4, TanStack Query, Zustand, React Hook Form + Zod |
+| Backend | **Supabase** — Auth, Postgres (RLS), Storage, Edge Functions |
+| Payments | PayFast (sandbox/live) via Edge Functions |
+| Email | Resend via Edge Functions |
 
-## How the pieces link
+The legacy Spring Boot + H2 API under `backend/` is **retired** (kept in-repo for reference only).
 
-Look for `LINK MAP` comments at the top of key files — they name the paired frontend/backend modules.
+## Architecture
 
-| Concern | Frontend | Backend |
+```
+React (Vite)  →  supabase-js  →  Auth / Postgres / Storage
+                              →  Edge Functions (admin decide, PayFast, contact, repay)
+```
+
+| Concern | Frontend | Supabase |
 | --- | --- | --- |
-| Routes / guards | `frontend/src/App.tsx`, `RequireAuth`, `RequireAdmin` | `SecurityConfig`, JWT filter |
-| HTTP client | `lib/api.ts` + `lib/apiClient.ts` | Controllers under `/api/*` |
-| Auth | `pages/Login.tsx`, `store/authStore.ts` | `AuthenticationController` |
-| Apply flow | `components/application/*`, `applicationStore` | `ApplicationController` / `ApplicationService` |
-| Admin decide | `pages/admin/AdminPanel.tsx` | `AdminController` → `ApplicationService.decide` |
-| Dashboard loans | `pages/Dashboard.tsx` | `LoanController` (loans created on approve) |
-| Transfers / debt | `pages/Transfer.tsx`, `DebtReview.tsx` | `TransferController`, `DebtReviewController` |
+| Auth | `store/authStore.ts`, Login/Register | Auth + `profiles` trigger |
+| Apply | `apiClient` create/upload/submit | `applications`, Storage `application-docs` |
+| Admin decide | `adminDecideApplication` | Edge Function `admin-decide-application` |
+| Loans / repay | Dashboard hooks | `loans`, `loan_schedule_items`, `repayments` + `make-repayment` / PayFast functions |
+| Transfers / debt | public pages | tables + RLS insert |
+| Contact | FAQ form | Edge Function `send-contact` (Resend) |
 
-Typical happy path: **Register/Login → Apply (create + docs + submit) → Admin approve → Loan on Dashboard → Repayment**.
+Happy path: **Register/Login → Apply → Admin approve → Loan on Dashboard → Repayment**.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 20+
-- Java 21+
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (for local backend) **or** a hosted Supabase project
 
-**Or** Docker Desktop / Docker Engine + Compose (no local Java/Node needed).
-
-### Docker (recommended for a quick run)
-
-From the project root:
+### 1. Supabase (local)
 
 ```bash
-# Optional: copy env overrides (JWT, Resend, PayFast)
-cp .env.docker.example .env
-
-docker compose up --build
+# From repo root
+npx supabase start
+npx supabase db reset          # applies supabase/migrations/*
+npx supabase status            # copy API URL + anon key
 ```
 
-- UI: http://localhost:5173  
-- API: http://localhost:8080 (also proxied at http://localhost:5173/api)  
-- H2 console: http://localhost:8080/h2-console  
+Copy keys into `frontend/.env.development` (or `.env.local`):
 
-Stop with `Ctrl+C`, or `docker compose down`. Data and uploads persist in named volumes (`backend_data`, `backend_uploads`).
+```
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_ANON_KEY=<anon key from status>
+```
 
-Email keys can also live in `backend/.env.notify` (Compose loads it when present).
-
-### Local (without Docker)
-
-#### 1. Run the Backend
+Serve Edge Functions (separate terminal):
 
 ```bash
-cd backend
-./mvnw spring-boot:run
+cp supabase/.env.example supabase/.env.local
+# edit secrets (PayFast / Resend optional for basic flows)
+npx supabase functions serve --env-file supabase/.env.local
 ```
 
-The API will be available at `http://localhost:8080`.
-The database is a local H2 file at `backend/data/tshedza`.
-H2 Console: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:file:./data/tshedza`, User: `sa`, Password: `password`).
-
-#### 2. Run the Frontend
+### 2. Frontend
 
 ```bash
 cd frontend
@@ -80,85 +79,42 @@ npm install
 npm run dev
 ```
 
-The UI will be available at `http://localhost:5173`.
+UI: http://localhost:5173
+
+### 3. Promote an admin
+
+Register via the UI, then in Supabase Studio SQL:
+
+```sql
+UPDATE public.profiles SET role = 'ADMIN' WHERE email = 'you@example.com';
+```
+
+## Edge Function secrets
+
+See [`supabase/.env.example`](supabase/.env.example). On hosted Supabase:
+
+```bash
+npx supabase secrets set --env-file supabase/.env.local
+```
+
+Set `PAYFAST_NOTIFY_URL` to:
+
+`https://YOUR_PROJECT.supabase.co/functions/v1/payfast-notify`
 
 ## Running Tests
 
-From the project root:
-
 ```bash
-./scripts/test-all.sh
-```
-
-Or individually:
-
-```bash
-cd backend && ./mvnw test
 cd frontend && npm test
 ```
 
-If Java 21 is not installed globally, `setup-tools.sh` downloads a local JDK into `.tools/` automatically.
+## Deploy
 
-## Demo Credentials
+### Supabase
 
-- **Customer**: `thabo@example.com` / `Password123!`
-- **Admin**: `admin@tshedza.local` / `Admin123!`
-
-## Email (Resend) + WhatsApp
-
-Transactional emails use the [Resend](https://resend.com) Java SDK (free tier).
-
-1. Create an API key at https://resend.com/api-keys  
-2. Copy [`backend/.env.notify.example`](backend/.env.notify.example) → `backend/.env.notify` and set `RESEND_API_KEY`  
-3. Keep `NOTIFY_FROM_EMAIL=onboarding@resend.dev` until you verify your own domain (you cannot send *from* a Gmail address)  
-4. Set `NOTIFY_OPS_EMAIL` to the inbox that should receive contact/ops mail (must be your Resend account email while using `onboarding@resend.dev`)  
-5. Start the backend from `backend/` (it auto-loads `.env.notify`)
-
-```bash
-cd backend
-cp .env.notify.example .env.notify
-# edit .env.notify — add your re_ key
-./mvnw spring-boot:run
-```
-
-If `RESEND_API_KEY` is empty, emails are skipped (logged only).
-
-Emails are sent on: contact form, application submit, approve/decline, repayment cleared, new transfer (ops), debt-review request.
-
-**WhatsApp** is click-to-chat only (`wa.me` links). There is no Meta WhatsApp Business API.
-
-## Deploy (Render + Vercel)
-
-Personal repo: push to GitHub, then connect both hosts to the same repo (not a work org).
-
-### Backend — [Render](https://render.com) Web Service (Docker)
-
-Use **Docker** (not Node). Easiest settings with the **repo-root** [`Dockerfile`](Dockerfile):
-
-| Setting | Value |
-| --- | --- |
-| Language / Runtime | **Docker** |
-| Root Directory | *(leave empty)* |
-| Dockerfile Path | `./Dockerfile` or `Dockerfile` |
-| Docker Build Context | `.` (repo root) |
-| Health Check Path | *(leave empty)* |
-
-Alternative (build only `backend/`):
-
-| Setting | Value |
-| --- | --- |
-| Root Directory | `backend` |
-| Dockerfile Path | `Dockerfile` |
-
-There is also a [`render.yaml`](render.yaml) blueprint.
-
-Set env vars from [`backend/.env.deploy.example`](backend/.env.deploy.example). At minimum:
-
-- `APP_JWT_SECRET` — long random string  
-- `APP_UPLOAD_DIR=/app/uploads`  
-- `CORS_ALLOWED_ORIGINS` — include your Vercel URL, e.g. `https://YOUR-APP.vercel.app,http://localhost:5173,http://127.0.0.1:5173`
-
-`PORT` is set by Render; `application.yml` reads `${PORT:8080}`.
+1. Create a project at https://supabase.com  
+2. `npx supabase link` + `npx supabase db push`  
+3. `npx supabase functions deploy`  
+4. Set function secrets (Resend, PayFast)
 
 ### Frontend — [Vercel](https://vercel.com)
 
@@ -167,11 +123,17 @@ Set env vars from [`backend/.env.deploy.example`](backend/.env.deploy.example). 
 | Root Directory | `frontend` |
 | Build Command | `npm run build` |
 | Output Directory | `dist` |
-| Env | Prefer leaving unset — [`frontend/.env.production`](frontend/.env.production) already sets `VITE_API_URL` to Render |
+| Env | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
 
-After deploy, the browser must call `https://tshedza-finance.onrender.com/api/...` (not `…vercel.app/api/...`). Check DevTools → Network.
+In Supabase Auth → URL config, add your Vercel origin to Site URL / Redirect URLs.
 
-On Render, set `CORS_ALLOWED_ORIGINS` to include `https://tshedza-finance.vercel.app` (defaults in `application.yml` already include it after the latest push).
+### Docker (frontend only)
+
+```bash
+export VITE_SUPABASE_URL=...
+export VITE_SUPABASE_ANON_KEY=...
+docker compose up --build
+```
 
 ---
 

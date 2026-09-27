@@ -31,6 +31,20 @@ export function useDocumentUpload() {
         setDocumentStatus(kind, 'rejected')
         return
       }
+      const allowedTypes = [
+        'application/pdf',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/heic',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ]
+      if (file.type && !allowedTypes.includes(file.type)) {
+        setError('Unsupported file type (PDF, JPG, PNG, or Word)')
+        setDocumentStatus(kind, 'rejected')
+        return
+      }
       setDocumentStatus(kind, 'uploading')
       try {
         await uploadDocument(applicationId, kind, file)

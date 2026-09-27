@@ -16,3 +16,5 @@ frontend/.env.production.local
 .idea/
 *.iml
 .DS_Store
+supabase/.temp/
+supabase/.env.local

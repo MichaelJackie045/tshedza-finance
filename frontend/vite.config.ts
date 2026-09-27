@@ -1,10 +1,7 @@
 /**
  * Vite bundler config.
  *
- * LINK MAP
- * - server.proxy./api -> http://localhost:8080 so browser calls same-origin /api/*
- *   which reaches Spring Boot controllers without CORS in typical local use.
- * - Alias @ -> src/ for imports across the frontend.
+ * Supabase is called directly from the browser (no Spring /api proxy).
  */
 
 import { defineConfig } from 'vitest/config'
@@ -15,21 +12,11 @@ import { fileURLToPath } from 'node:url'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
-
-
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(rootDir, './src'),
-    },
-  },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
     },
   },
   test: {
