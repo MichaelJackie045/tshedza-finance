@@ -18,3 +18,4 @@ frontend/.env.production.local
 .DS_Store
 supabase/.temp/
 supabase/.env.local
+uploads/
