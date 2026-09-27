@@ -12,18 +12,19 @@ export function allowedOrigins(): string[] {
     .filter(Boolean)
 }
 
-export function resolveCorsOrigin(requestOrigin?: string | null): string {
+export function resolveCorsOrigin(requestOrigin?: string | null): string | null {
   const allow = allowedOrigins()
   if (allow.length === 0) {
-    // Local/dev default: reflect localhost origins, else deny wildcard for credentials-safe APIs
+    // In production, do not reflect origin. Require explicit ALLOWED_ORIGINS.
+    // For local dev, reflect localhost origins.
     if (
+      Deno.env.get('ALLOW_LOCAL_ORIGINS') === 'true' &&
       requestOrigin &&
-      (requestOrigin.startsWith('http://localhost:') ||
-        requestOrigin.startsWith('http://127.0.0.1:'))
+      (requestOrigin.startsWith('http://localhost:') || requestOrigin.startsWith('http://127.0.0.1:'))
     ) {
       return requestOrigin
     }
-    return 'http://localhost:5173'
+    return null
   }
   if (requestOrigin && allow.includes(requestOrigin)) return requestOrigin
   return allow[0]
@@ -31,13 +32,16 @@ export function resolveCorsOrigin(requestOrigin?: string | null): string {
 
 export function corsHeaders(origin?: string | null): Record<string, string> {
   const resolved = resolveCorsOrigin(origin)
-  return {
-    'Access-Control-Allow-Origin': resolved,
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin',
+    Vary: 'Origin',
     'X-Content-Type-Options': 'nosniff',
   }
+  if (resolved) {
+    headers['Access-Control-Allow-Origin'] = resolved
+  }
+  return headers
 }
 
 export function jsonResponse(body: unknown, status = 200, origin?: string | null) {
