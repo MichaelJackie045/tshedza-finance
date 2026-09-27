@@ -9,6 +9,6 @@ services:
       context: ./frontend
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      # Do not pass anon key as build arg; provide at runtime via environment or host secret injection.
     ports:
       - "5173:80"

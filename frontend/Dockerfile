@@ -8,9 +8,8 @@ RUN npm ci
 COPY . .
 
 ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+# Do NOT bake sensitive keys into image layers. Provide anon key at runtime via your host or CDN-edge config.
+# If you need runtime substitution, use a small entrypoint script to replace placeholders at container start.
 
 RUN npm run build
 
