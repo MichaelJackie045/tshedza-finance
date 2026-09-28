@@ -2,7 +2,7 @@
  * One function per former Spring endpoint — now backed by Supabase.
  *
  * Auth / tables / storage: direct supabase-js + RLS
- * Privileged flows: Edge Functions (admin decide, PayFast, repayments, contact)
+ * Privileged flows: Edge Functions (admin decide, mock payments, repayments, contact)
  */
 
 import { calculateTransferFee } from '@/lib/loanCalc'
@@ -382,39 +382,22 @@ export async function makeRepayment(loanId: string): Promise<Payment> {
   return invokeFunction<Payment>('make-repayment', { loanId })
 }
 
-export type PayFastInitiateResponse = {
-  processUrl: string
+export type PaymentInitiateResponse = {
   paymentId: string
-  sandbox: boolean
-  fields: Record<string, string>
+  checkoutUrl: string
+  amount: number
 }
 
-export async function initiatePayFast(loanId: string) {
-  return invokeFunction<PayFastInitiateResponse>('payfast-initiate', { loanId })
+export async function initiatePayment(loanId: string) {
+  return invokeFunction<PaymentInitiateResponse>('payment-initiate', { loanId })
 }
 
-export async function confirmPayFastPayment(paymentId: string) {
-  return invokeFunction<Payment>('payfast-confirm', { paymentId })
+export async function completePayment(paymentId: string) {
+  return invokeFunction<Payment>('payment-complete', { paymentId })
 }
 
-export async function cancelPayFastPayment(paymentId: string) {
-  return invokeFunction<Payment>('payfast-cancel', { paymentId })
-}
-
-export function redirectToPayFast(processUrl: string, fields: Record<string, string>) {
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = processUrl
-  form.style.display = 'none'
-  for (const [name, value] of Object.entries(fields)) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = name
-    input.value = value
-    form.appendChild(input)
-  }
-  document.body.appendChild(form)
-  form.submit()
+export async function cancelPayment(paymentId: string) {
+  return invokeFunction<Payment>('payment-cancel', { paymentId })
 }
 
 // --- Admin ---

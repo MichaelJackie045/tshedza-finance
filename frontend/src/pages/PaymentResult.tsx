@@ -1,10 +1,10 @@
 /**
- * PayFast return / cancel pages after sandbox or live checkout redirect.
+ * Return / cancel pages after mock checkout.
  */
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { cancelPayFastPayment, confirmPayFastPayment } from '@/lib/apiClient'
+import { cancelPayment, completePayment } from '@/lib/apiClient'
 import { PageIntro, accentBtn } from '@/components/ui/primitives'
 import { whatsappChatUrl } from '@/content/brand'
 
@@ -24,7 +24,7 @@ export function PaymentReturnPage() {
         return
       }
       try {
-        await confirmPayFastPayment(ref)
+        await completePayment(ref)
         if (cancelled) return
         await queryClient.invalidateQueries({ queryKey: ['repayments'] })
         await queryClient.invalidateQueries({ queryKey: ['loans'] })
@@ -32,11 +32,10 @@ export function PaymentReturnPage() {
         setMessage('Payment received. Your balance will update shortly.')
       } catch {
         if (cancelled) return
-        // ITN may already have cleared it, or user cancelled mid-flow
         await queryClient.invalidateQueries({ queryKey: ['repayments'] })
         await queryClient.invalidateQueries({ queryKey: ['loans'] })
         setStatus('ok')
-        setMessage('If you completed payment on PayFast, it will show in your history once confirmed.')
+        setMessage('If you completed payment, it will show in your history once confirmed.')
       }
     }
     void run()
@@ -80,7 +79,7 @@ export function PaymentCancelPage() {
     let cancelled = false
     async function run() {
       try {
-        await cancelPayFastPayment(ref!)
+        await cancelPayment(ref!)
       } catch {
         // already cleared / unknown — still refresh lists
       }

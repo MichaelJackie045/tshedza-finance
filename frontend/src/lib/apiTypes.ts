@@ -39,10 +39,11 @@ export type Loan = {
 
 export type Payment = {
   id: string
+  loanId?: string
   date: string
   amount: number
   method: string
-  status: 'active' | 'approved' | 'paid' | 'cleared' | 'pending' | 'upcoming' | 'overdue'
+  status: 'active' | 'approved' | 'paid' | 'cleared' | 'pending' | 'upcoming' | 'overdue' | 'cancelled'
 }
 
 export type UserRole = 'USER' | 'ADMIN'

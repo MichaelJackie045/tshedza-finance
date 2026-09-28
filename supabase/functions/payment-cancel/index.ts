@@ -1,5 +1,4 @@
 import {
-  applyInstalment,
   corsHeaders,
   createServiceClient,
   jsonResponse,
@@ -17,13 +16,11 @@ Deno.serve(async (req) => {
 
   try {
     if (req.method !== 'POST') return methodNotAllowed(origin)
-
-    const { user } = await requireUser(req)
-    const sandbox = (Deno.env.get('PAYFAST_SANDBOX') || 'true') !== 'false'
-    if (!sandbox) {
-      return jsonResponse({ error: 'Return confirm only allowed in sandbox' }, 400, origin)
+    if (Deno.env.get('MOCK_PAYMENTS_ENABLED') !== 'true') {
+      return jsonResponse({ error: 'Payments are not configured' }, 503, origin)
     }
 
+    const { user } = await requireUser(req)
     const { paymentId } = await readJsonBody<{ paymentId?: string }>(req)
     if (!paymentId || typeof paymentId !== 'string' || paymentId.length > 64) {
       return jsonResponse({ error: 'paymentId required' }, 400, origin)
@@ -43,24 +40,12 @@ Deno.serve(async (req) => {
     if ((repayment.status || '').toLowerCase() === 'cleared') {
       return jsonResponse(mapPayment(repayment), 200, origin)
     }
-    if ((repayment.status || '').toLowerCase() !== 'pending') {
-      return jsonResponse({ error: 'Payment is not pending' }, 400, origin)
+    if ((repayment.status || '').toLowerCase() === 'pending') {
+      await service.from('repayments').update({ status: 'cancelled' }).eq('id', paymentId)
+      repayment.status = 'cancelled'
     }
 
-    await service
-      .from('repayments')
-      .update({
-        status: 'cleared',
-        method: 'PayFast',
-        pf_payment_id: 'SANDBOX-LOCAL',
-        date: new Date().toISOString(),
-      })
-      .eq('id', paymentId)
-
-    await applyInstalment(service, repayment.loan_id, Number(repayment.amount))
-
-    const { data: updated } = await service.from('repayments').select('*').eq('id', paymentId).single()
-    return jsonResponse(mapPayment(updated ?? repayment), 200, origin)
+    return jsonResponse(mapPayment(repayment), 200, origin)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     return jsonResponse({ error: message }, statusForError(message), origin)

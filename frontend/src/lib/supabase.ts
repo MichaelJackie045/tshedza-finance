@@ -9,15 +9,20 @@ import { createClient } from '@supabase/supabase-js'
 const url =
   (import.meta.env.VITE_SUPABASE_URL as string | undefined) ||
   'http://127.0.0.1:54321'
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)
 
-if (!anonKey) {
-  console.error(
-    'VITE_SUPABASE_ANON_KEY is not set. Do NOT commit secrets. Set this via environment or runtime config.',
-  )
+function requireAnonKey(): string {
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  if (key) return key
+  const message =
+    'VITE_SUPABASE_ANON_KEY is not set. Do NOT commit secrets. Set this via environment or runtime config.'
+  if (import.meta.env.PROD) {
+    throw new Error(message)
+  }
+  console.error(message)
+  return ''
 }
 
-export const supabase = createClient(url, anonKey, {
+export const supabase = createClient(url, requireAnonKey(), {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

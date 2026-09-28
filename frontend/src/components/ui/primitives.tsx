@@ -268,6 +268,7 @@ const statusStyles: Record<string, string> = {
   pending: 'bg-surface text-ink-muted',
   upcoming: 'bg-surface text-ink-muted',
   overdue: 'bg-rust-soft text-rust',
+  cancelled: 'bg-surface text-ink-muted',
 }
 
 const statusLabels: Record<string, string> = {
@@ -278,12 +279,13 @@ const statusLabels: Record<string, string> = {
   pending: 'Pending',
   upcoming: 'Upcoming',
   overdue: 'Overdue',
+  cancelled: 'Cancelled',
 }
 
 export function StatusPill({
   status,
 }: {
-  status: 'active' | 'approved' | 'pending' | 'overdue' | 'paid' | 'upcoming' | 'cleared'
+  status: 'active' | 'approved' | 'pending' | 'overdue' | 'paid' | 'upcoming' | 'cleared' | 'cancelled'
 }) {
   return (
     <span

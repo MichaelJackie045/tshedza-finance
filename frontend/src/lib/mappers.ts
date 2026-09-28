@@ -82,6 +82,7 @@ export function mapLoan(
 
 export function mapPayment(row: {
   id: string
+  loan_id?: string | null
   date?: string | null
   amount?: number | string | null
   method?: string | null
@@ -89,6 +90,7 @@ export function mapPayment(row: {
 }): Payment {
   return {
     id: row.id,
+    loanId: row.loan_id ?? undefined,
     date: row.date ?? '',
     amount: Number(row.amount ?? 0),
     method: row.method ?? '',

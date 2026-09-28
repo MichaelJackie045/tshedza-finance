@@ -276,15 +276,18 @@ export async function sendResendEmail(opts: {
 }) {
   const apiKey = Deno.env.get('RESEND_API_KEY')
   const from = Deno.env.get('RESEND_FROM') || 'Tshedza Finance <onboarding@resend.dev>'
+
   if (!apiKey) {
-    console.log('RESEND_API_KEY not set; skipping email', opts.subject)
-    return
+    throw new Error('RESEND_API_KEY is not configured')
+  }
+  if (!from.trim()) {
+    throw new Error('RESEND_FROM is not configured')
   }
   if (!isValidEmail(opts.to)) {
-    console.warn('Refusing to send to invalid email')
-    return
+    throw new Error(`Invalid recipient email: ${opts.to}`)
   }
-  await fetch('https://api.resend.com/emails', {
+
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -292,4 +295,10 @@ export async function sendResendEmail(opts: {
     },
     body: JSON.stringify({ from, to: opts.to, subject: opts.subject, html: opts.html }),
   })
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    const detail = body ? ` — ${body.slice(0, 1000)}` : ''
+    throw new Error(`Resend rejected email for ${opts.to}: ${response.status} ${response.statusText}${detail}`)
+  }
 }

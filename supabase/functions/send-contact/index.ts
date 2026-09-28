@@ -9,6 +9,28 @@ import {
   statusForError,
 } from '../_shared/cors.ts'
 
+const WINDOW_MS = 15 * 60 * 1000
+const MAX_REQUESTS = 5
+const hits = new Map<string, number[]>()
+
+function clientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for') || ''
+  const first = forwarded.split(',')[0]?.trim()
+  return first || req.headers.get('cf-connecting-ip') || 'unknown'
+}
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const recent = (hits.get(ip) ?? []).filter((at) => now - at < WINDOW_MS)
+  if (recent.length >= MAX_REQUESTS) {
+    hits.set(ip, recent)
+    return true
+  }
+  recent.push(now)
+  hits.set(ip, recent)
+  return false
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get('Origin')
   if (req.method === 'OPTIONS') {
@@ -17,6 +39,9 @@ Deno.serve(async (req) => {
 
   try {
     if (req.method !== 'POST') return methodNotAllowed(origin)
+    if (isRateLimited(clientIp(req))) {
+      return jsonResponse({ error: 'Too many requests' }, 429, origin)
+    }
 
     const body = await readJsonBody<{
       name?: string

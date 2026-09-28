@@ -2,7 +2,7 @@
  * Authenticated customer area: loans, repayments, documents, profile.
  *
  * LINK MAP
- * - fetchLoans / fetchLoan / makeRepayment -> LoanController.
+ * - fetchLoans / fetchLoan / initiatePayment -> loans and mock checkout.
  * - Loans appear after DataInitializer seed OR admin approval of an application.
  * - Layout/nav: DashboardLayout; routes under /dashboard/* in App.tsx.
  */
@@ -11,13 +11,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useDashboardLoans, useLoanStatus, useRepaymentHistory } from '@/hooks/useLoanStatus'
-import {
-  fetchMe,
-  fetchMyDocuments,
-  initiatePayFast,
-  logout as apiLogout,
-  redirectToPayFast,
-} from '@/lib/apiClient'
+import { fetchMe, fetchMyDocuments, initiatePayment, logout as apiLogout } from '@/lib/apiClient'
 import { useAuthStore } from '@/store/authStore'
 import { formatDate, formatRand } from '@/lib/format'
 import { Button, StatusPill, PageIntro, accentBtn } from '@/components/ui/primitives'
@@ -25,11 +19,6 @@ import { Reveal } from '@/components/ui/Reveal'
 
 function LoadingLine({ label }: { label: string }) {
   return <p className="text-ink-muted">{label}</p>
-}
-
-async function startPayFastForLoan(loanId: string) {
-  const { processUrl, fields } = await initiatePayFast(loanId)
-  redirectToPayFast(processUrl, fields)
 }
 
 function formatPhone(phone: string | undefined) {
@@ -193,11 +182,13 @@ export function LoanDetailPage() {
 }
 
 export function RepaymentsPage() {
+  const navigate = useNavigate()
   const { data: payments, isLoading } = useRepaymentHistory()
   const { data: loansData } = useDashboardLoans()
   const loan = loansData?.loans[0]
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const mockPayments = import.meta.env.VITE_MOCK_PAYMENTS === 'true'
 
   async function onPay() {
     if (!loan) {
@@ -207,9 +198,11 @@ export function RepaymentsPage() {
     setPaying(true)
     setError(null)
     try {
-      await startPayFastForLoan(loan.id)
+      const { checkoutUrl } = await initiatePayment(loan.id)
+      const url = new URL(checkoutUrl, window.location.origin)
+      navigate(`${url.pathname}${url.search}`)
     } catch {
-      setError('Could not start PayFast checkout. Try again.')
+      setError('Could not start checkout. Try again.')
       setPaying(false)
     }
   }
@@ -219,13 +212,21 @@ export function RepaymentsPage() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <PageIntro title="Payments">History of what has gone out, and a button to pay the next instalment.</PageIntro>
         <Button variant="primary" onClick={() => void onPay()} disabled={paying || !loan}>
-          {paying ? 'Redirecting…' : 'Make a payment'}
+          {paying ? 'Opening checkout…' : 'Make a payment'}
         </Button>
       </div>
+      {mockPayments ? (
+        <p
+          role="status"
+          className="rounded-sm border border-amber bg-amber-soft px-4 py-3 text-[0.9375rem] text-amber"
+        >
+          Demo payments — no real money is charged.
+        </p>
+      ) : null}
       {error ? <p className="text-[0.9375rem] text-red-700">{error}</p> : null}
       {loan ? (
         <p className="text-[0.9375rem] text-ink-muted">
-          Next instalment {formatRand(loan.nextPaymentAmount)} via PayFast sandbox.
+          Next instalment {formatRand(loan.nextPaymentAmount)}.
         </p>
       ) : null}
 

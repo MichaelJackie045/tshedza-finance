@@ -42,16 +42,13 @@ enable_confirmations = false
 [functions.admin-decide-application]
 verify_jwt = true
 
-[functions.payfast-initiate]
+[functions.payment-initiate]
 verify_jwt = true
 
-[functions.payfast-notify]
-verify_jwt = false
-
-[functions.payfast-confirm]
+[functions.payment-complete]
 verify_jwt = true
 
-[functions.payfast-cancel]
+[functions.payment-cancel]
 verify_jwt = true
 
 [functions.make-repayment]
@@ -59,3 +56,10 @@ verify_jwt = true
 
 [functions.send-contact]
 verify_jwt = false
+
+# Local Edge Function env only. Hosted secrets are set with `supabase secrets set`.
+# Do not put API keys here. ALLOW_LOCAL_ORIGINS must stay off in production.
+[edge_runtime.secrets]
+MOCK_PAYMENTS_ENABLED = "true"
+MOCK_CHECKOUT_BASE_URL = "http://localhost:5173/dashboard/repayments/checkout"
+ALLOW_LOCAL_ORIGINS = "true"

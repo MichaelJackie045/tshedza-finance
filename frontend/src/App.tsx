@@ -34,6 +34,7 @@ import {
   ProfilePage,
 } from '@/pages/Dashboard'
 import { PaymentReturnPage, PaymentCancelPage } from '@/pages/PaymentResult'
+import { MockCheckoutPage } from '@/pages/MockCheckout'
 import { LoginPage } from '@/pages/Login'
 import { RegisterPage } from '@/pages/Register'
 import { RequireAuth } from '@/components/auth/RequireAuth'
@@ -109,6 +110,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="loans/:loanId" element={<LoanDetailPage />} />
             <Route path="repayments" element={<RepaymentsPage />} />
+            <Route path="repayments/checkout" element={<MockCheckoutPage />} />
             <Route path="repayments/return" element={<PaymentReturnPage />} />
             <Route path="repayments/cancel" element={<PaymentCancelPage />} />
             <Route path="documents" element={<DocumentsPage />} />
