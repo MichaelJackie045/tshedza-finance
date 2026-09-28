@@ -1,9 +1,4 @@
 .tools/
-backend/.env.notify
-backend/.env
-backend/.env.payfast
-backend/data/
-backend/uploads/
 **/target/
 frontend/node_modules/
 frontend/dist/
@@ -16,3 +11,7 @@ frontend/.env.production.local
 .idea/
 *.iml
 .DS_Store
+supabase/.temp/
+supabase/.env.local
+supabase/.env.production.local
+uploads/

@@ -1,9 +1,5 @@
 /**
- * Browser entry: hydrate JWT from sessionStorage, then mount App.
- *
- * LINK MAP
- * - hydrateAuth() -> lib/api.ts setAccessToken so axios sends Bearer token.
- * - App.tsx owns all React Router routes.
+ * Browser entry: hydrate Supabase session, then mount App.
  */
 
 import { StrictMode } from 'react'
@@ -12,7 +8,7 @@ import './index.css'
 import App from './App'
 import { hydrateAuth } from '@/store/authStore'
 
-hydrateAuth()
+void hydrateAuth()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

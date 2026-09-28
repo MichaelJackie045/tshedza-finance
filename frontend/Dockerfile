@@ -7,9 +7,9 @@ RUN npm ci
 
 COPY . .
 
-# Same-origin /api — nginx proxies to the backend service
-ARG VITE_API_URL=/api
-ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_SUPABASE_URL
+# Do NOT bake sensitive keys into image layers. Provide anon key at runtime via your host or CDN-edge config.
+# If you need runtime substitution, use a small entrypoint script to replace placeholders at container start.
 
 RUN npm run build
 

@@ -1,17 +1,13 @@
 /**
- * One function per backend endpoint -- the frontend/API contract.
+ * One function per former Spring endpoint — now backed by Supabase.
  *
- * LINK MAP (selected)
- * Auth:      login/register/logout -> AuthenticationController
- * Apply:     createApplication/uploadDocument/submitApplication -> ApplicationController
- * Dashboard: fetchLoans/fetchLoan/makeRepayment -> LoanController
- * Public:    createTransfer / createDebtReview -> TransferController / DebtReviewController
- * Admin:     fetchAdmin* / adminDecideApplication -> AdminController
- *
- * Pages/hooks import these; they should not call axios directly.
+ * Auth / tables / storage: direct supabase-js + RLS
+ * Privileged flows: Edge Functions (admin decide, mock payments, repayments, contact)
  */
 
-import { api } from '@/lib/api'
+import { calculateTransferFee } from '@/lib/loanCalc'
+import { mapAdminApplication, mapAdminDebtReview, mapAdminOverview, mapAdminTransfer, mapLoan, mapPayment, mapProfile } from '@/lib/mappers'
+import { invokeFunction, supabase } from '@/lib/supabase'
 import type { DetailsForm } from '@/lib/validation'
 import type {
   AuthResponse,
@@ -26,63 +22,215 @@ import type {
   AdminDebtReview,
 } from '@/lib/apiTypes'
 
-// --- Auth (AuthenticationController) --- used by Login.tsx / Register.tsx / authStore ---
+function assertNoError(error: { message: string } | null) {
+  if (error) throw new Error(error.message)
+}
 
-/** POST /api/auth/login */
-export async function login(email: string, password: string) {
-  const { data } = await api.post<AuthResponse>('/auth/login', { email, password })
+function assertData<T>(data: T | null, error: { message: string } | null): T {
+  assertNoError(error)
+  if (data == null) throw new Error('No data returned')
   return data
 }
 
-/** POST /api/auth/register */
+async function currentUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser()
+  assertNoError(error)
+  if (!data.user) throw new Error('Not authenticated')
+  return data.user.id
+}
+
+async function fetchProfile(userId: string): Promise<UserProfile> {
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+  assertNoError(error)
+  return mapProfile(data)
+}
+
+// --- Auth ---
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  assertNoError(error)
+  if (!data.session || !data.user) throw new Error('Login failed')
+  const user = await fetchProfile(data.user.id)
+  return { accessToken: data.session.access_token, user }
+}
+
 export async function register(body: {
   email: string
   password: string
   firstName: string
   lastName: string
   phone: string
-}) {
-  const { data } = await api.post<AuthResponse>('/auth/register', body)
-  return data
+}): Promise<AuthResponse> {
+  const { data, error } = await supabase.auth.signUp({
+    email: body.email,
+    password: body.password,
+    options: {
+      data: {
+        first_name: body.firstName,
+        last_name: body.lastName,
+        phone: body.phone,
+      },
+    },
+  })
+  assertNoError(error)
+  if (!data.user) throw new Error('Registration failed')
+
+  // Ensure profile name/phone are set (email/role locked by DB trigger)
+  await supabase
+    .from('profiles')
+    .update({
+      first_name: body.firstName,
+      last_name: body.lastName,
+      phone: body.phone,
+    })
+    .eq('id', data.user.id)
+
+  if (!data.session) {
+    // Email confirmations enabled — session may be null
+    throw new Error('Check your email to confirm your account, then log in.')
+  }
+
+  const user = await fetchProfile(data.user.id)
+  return { accessToken: data.session.access_token, user }
 }
 
-/** POST /api/auth/logout */
 export async function logout() {
-  await api.post('/auth/logout')
+  const { error } = await supabase.auth.signOut()
+  assertNoError(error)
 }
 
-/** GET /api/me (MeController) */
-export async function fetchMe() {
-  const { data } = await api.get<UserProfile>('/me')
-  return data
+export async function fetchMe(): Promise<UserProfile> {
+  const userId = await currentUserId()
+  return fetchProfile(userId)
 }
 
-// --- Apply flow (ApplicationController) --- DetailsStep / DocumentsStep / ReviewStep ---
+// --- Apply flow ---
 
-/** POST /api/applications — stores draft; returns id kept in applicationStore */
 export async function createApplication(body: {
   product: ProductType
   amount: number
   termMonths: number
   details: Partial<DetailsForm> & { employerName?: string; weeklyWage?: string }
 }) {
-  const { data } = await api.post<{ id: string; status: string }>('/applications', body)
-  return data
+  const userId = await currentUserId()
+  const details = body.details ?? {}
+
+  // Sync profile from application details
+  const profilePatch: Record<string, string> = {}
+  if (details.firstName) profilePatch.first_name = details.firstName.trim()
+  if (details.lastName) profilePatch.last_name = details.lastName.trim()
+  if (details.phone) profilePatch.phone = details.phone.trim()
+  if (details.idNumber) profilePatch.id_number = details.idNumber.trim()
+  if (Object.keys(profilePatch).length) {
+    await supabase.from('profiles').update(profilePatch).eq('id', userId)
+  }
+
+  const parseIncome = (value?: string) => {
+    if (!value || !String(value).trim()) return null
+    return Number(String(value).replace(/\s/g, ''))
+  }
+
+  const row = {
+    user_id: userId,
+    product: body.product,
+    amount: body.amount,
+    term_months: body.termMonths,
+    status: 'draft',
+    first_name: details.firstName ?? null,
+    last_name: details.lastName ?? null,
+    id_number: details.idNumber ?? null,
+    phone: details.phone ?? null,
+    email: details.email ?? null,
+    present_address: details.presentAddress ?? null,
+    city: details.city ?? null,
+    province: details.province ?? null,
+    post_code: details.postCode ?? null,
+    occupation: details.occupation ?? null,
+    employment_status: details.employmentStatus ?? null,
+    monthly_income: parseIncome(details.monthlyIncome),
+    employer_name: details.employerName ?? null,
+    weekly_wage: parseIncome(details.weeklyWage),
+  }
+
+  // Reuse latest draft if present
+  const { data: existing } = await supabase
+    .from('applications')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing?.id) {
+    const { data, error } = await supabase
+      .from('applications')
+      .update(row)
+      .eq('id', existing.id)
+      .select('id, status')
+      .single()
+    const saved = assertData(data, error)
+    return { id: saved.id as string, status: saved.status as string }
+  }
+
+  const { data, error } = await supabase.from('applications').insert(row).select('id, status').single()
+  const saved = assertData(data, error)
+  return { id: saved.id as string, status: saved.status as string }
 }
 
-/** POST /api/applications/{id}/documents — useDocumentUpload / DocumentsStep */
 export async function uploadDocument(applicationId: string, kind: DocumentKind, file: File) {
-  const form = new FormData()
-  form.append('kind', kind)
-  form.append('file', file)
-  const { data } = await api.post<{ kind: DocumentKind; status: 'uploaded' | 'rejected' }>(
-    `/applications/${applicationId}/documents`,
-    form,
-  )
-  return data
+  const allowedKinds: DocumentKind[] = [
+    'id',
+    'payslip',
+    'bank1',
+    'bank2',
+    'bank3',
+    'address',
+    'employment',
+  ]
+  if (!allowedKinds.includes(kind)) {
+    throw new Error('Invalid document kind')
+  }
+
+  const allowedTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]
+  if (file.type && !allowedTypes.includes(file.type)) {
+    throw new Error('Unsupported file type')
+  }
+  if (file.size <= 0 || file.size > 8 * 1024 * 1024) {
+    throw new Error('File must be under 8 MB')
+  }
+
+  const userId = await currentUserId()
+  const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(0, 120)
+  const path = `${userId}/${applicationId}/${kind}_${crypto.randomUUID()}_${safeName}`
+
+  const { error: upErr } = await supabase.storage.from('application-docs').upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  })
+  assertNoError(upErr)
+
+  const { error: metaErr } = await supabase.from('application_documents').insert({
+    application_id: applicationId,
+    kind,
+    file_name: file.name.slice(0, 255),
+    storage_path: path,
+    status: 'uploaded',
+  })
+  assertNoError(metaErr)
+
+  return { kind, status: 'uploaded' as const }
 }
 
-/** POST /api/applications/{id}/submit — ReviewStep; then admin queue */
 export async function submitApplication(
   applicationId: string,
   body: {
@@ -92,42 +240,84 @@ export async function submitApplication(
     termMonths: number
   },
 ) {
-  const { data } = await api.post<{ id: string; reference: string; status: string }>(
-    `/applications/${applicationId}/submit`,
-    body,
-  )
-  return data
+  const reference = `TF-${Date.now() % 100000000}`
+  const { data, error } = await supabase
+    .from('applications')
+    .update({
+      status: 'pending',
+      reference,
+      amount: body.amount,
+      term_months: body.termMonths,
+    })
+    .eq('id', applicationId)
+    .select('id, reference, status')
+    .single()
+  const saved = assertData(data, error)
+  return {
+    id: saved.id as string,
+    reference: (saved.reference as string) ?? reference,
+    status: saved.status as string,
+  }
 }
 
-// --- Dashboard (LoanController) --- Dashboard.tsx ---
+// --- Dashboard ---
 
-/** GET /api/loans */
 export async function fetchLoans() {
-  const { data } = await api.get<{ loans: Loan[] }>('/loans')
-  return data
+  const { data, error } = await supabase
+    .from('loans')
+    .select('*, loan_schedule_items(*)')
+    .order('created_at', { ascending: false })
+  assertNoError(error)
+  return { loans: (data ?? []).map(mapLoan) }
 }
 
-/** GET /api/loans/{id} */
-export async function fetchLoan(loanId: string) {
-  const { data } = await api.get<Loan>(`/loans/${loanId}`)
-  return data
+export async function fetchLoan(loanId: string): Promise<Loan> {
+  const { data, error } = await supabase
+    .from('loans')
+    .select('*, loan_schedule_items(*)')
+    .eq('id', loanId)
+    .single()
+  assertNoError(error)
+  return mapLoan(data)
 }
 
-/** GET /api/repayments */
-export async function fetchRepayments() {
-  const { data } = await api.get<Payment[]>('/repayments')
-  return data
+export async function fetchRepayments(): Promise<Payment[]> {
+  const userId = await currentUserId()
+  const { data: loans, error: loanErr } = await supabase.from('loans').select('id').eq('user_id', userId)
+  assertNoError(loanErr)
+  const loanIds = (loans ?? []).map((l) => l.id)
+  if (!loanIds.length) return []
+
+  const { data, error } = await supabase
+    .from('repayments')
+    .select('*')
+    .in('loan_id', loanIds)
+    .order('date', { ascending: false })
+  assertNoError(error)
+  return (data ?? []).map(mapPayment)
 }
 
-/** GET /api/me/documents */
 export async function fetchMyDocuments() {
-  const { data } = await api.get<Array<{ kind: string; fileName: string; status: string }>>('/me/documents')
-  return data
+  const userId = await currentUserId()
+  const { data: apps, error: appErr } = await supabase.from('applications').select('id').eq('user_id', userId)
+  assertNoError(appErr)
+  const appIds = (apps ?? []).map((a) => a.id)
+  if (!appIds.length) return []
+
+  const { data, error } = await supabase
+    .from('application_documents')
+    .select('kind, file_name, status')
+    .in('application_id', appIds)
+  assertNoError(error)
+  return (data ?? []).map((d) => ({
+    kind: d.kind as string,
+    fileName: d.file_name as string,
+    status: d.status as string,
+  }))
 }
 
 // --- Public flows ---
 
-/** POST /api/transfers — Transfer.tsx (no JWT required) */
 export async function createTransfer(body: {
   senderName: string
   senderPhone: string
@@ -136,126 +326,133 @@ export async function createTransfer(body: {
   country: string
   amount: number
 }) {
-  const { data } = await api.post<{ id: string; reference?: string; fee: number; total: number }>(
-    '/transfers',
-    body,
-  )
-  return { ...data, reference: data.reference ?? data.id }
+  const quote = calculateTransferFee(body.amount, body.country)
+  const id = `TX-${Date.now() % 100000000}`
+  // No .select() — anon/authenticated can INSERT but only admins can SELECT
+  const { error } = await supabase.from('transfers').insert({
+    id,
+    sender_name: body.senderName,
+    sender_phone: body.senderPhone,
+    recipient_name: body.recipientName,
+    recipient_phone: body.recipientPhone,
+    country: body.country,
+    amount: quote.amount,
+    fee: quote.fee,
+    total: quote.total,
+    status: 'pending',
+  })
+  assertNoError(error)
+  return {
+    id,
+    reference: id,
+    fee: quote.fee,
+    total: quote.total,
+  }
 }
 
-/** POST /api/debt-review — DebtReview.tsx (no JWT required) */
 export async function createDebtReview(body: {
   fullName: string
   phone: string
   email: string
   situation: string
 }) {
-  const { data } = await api.post<{ id: string; status: string }>('/debt-review', body)
-  return data
+  const id = crypto.randomUUID()
+  const { error } = await supabase.from('debt_review_requests').insert({
+    id,
+    full_name: body.fullName,
+    phone: body.phone,
+    email: body.email,
+    situation: body.situation,
+    status: 'pending',
+  })
+  assertNoError(error)
+  return { id, status: 'pending' }
 }
 
-/** POST /api/contact — ContactPage form → ops inbox via Resend */
 export async function createContactMessage(body: {
   name: string
   email: string
   phone?: string
   message: string
 }) {
-  const { data } = await api.post<{ ok: boolean }>('/contact', body)
-  return data
+  return invokeFunction<{ ok: boolean }>('send-contact', body)
 }
 
-/** POST /api/repayments — legacy instant demo pay (kept for smoke tests) */
-export async function makeRepayment(loanId: string) {
-  const { data } = await api.post<Payment>('/repayments', { loanId })
-  return data
+export async function makeRepayment(loanId: string): Promise<Payment> {
+  return invokeFunction<Payment>('make-repayment', { loanId })
 }
 
-export type PayFastInitiateResponse = {
-  processUrl: string
+export type PaymentInitiateResponse = {
   paymentId: string
-  sandbox: boolean
-  fields: Record<string, string>
+  checkoutUrl: string
+  amount: number
 }
 
-/** POST /api/payments/payfast/initiate — signed PayFast form fields */
-export async function initiatePayFast(loanId: string) {
-  const { data } = await api.post<PayFastInitiateResponse>('/payments/payfast/initiate', { loanId })
-  return data
+export async function initiatePayment(loanId: string) {
+  return invokeFunction<PaymentInitiateResponse>('payment-initiate', { loanId })
 }
 
-/** POST /api/payments/payfast/confirm — sandbox return completion when ITN cannot reach localhost */
-export async function confirmPayFastPayment(paymentId: string) {
-  const { data } = await api.post<Payment>('/payments/payfast/confirm', { paymentId })
-  return data
+export async function completePayment(paymentId: string) {
+  return invokeFunction<Payment>('payment-complete', { paymentId })
 }
 
-/** POST /api/payments/payfast/cancel — mark abandoned checkout as cancelled */
-export async function cancelPayFastPayment(paymentId: string) {
-  const { data } = await api.post<Payment>('/payments/payfast/cancel', { paymentId })
-  return data
+export async function cancelPayment(paymentId: string) {
+  return invokeFunction<Payment>('payment-cancel', { paymentId })
 }
 
-/** Build and auto-submit a PayFast checkout form in the browser. */
-export function redirectToPayFast(processUrl: string, fields: Record<string, string>) {
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = processUrl
-  form.style.display = 'none'
-  for (const [name, value] of Object.entries(fields)) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = name
-    input.value = value
-    form.appendChild(input)
-  }
-  document.body.appendChild(form)
-  form.submit()
+// --- Admin ---
+
+export async function fetchAdminOverview(): Promise<AdminOverview> {
+  const { data, error } = await supabase.rpc('get_admin_overview')
+  assertNoError(error)
+  return mapAdminOverview((data as Record<string, number>) ?? {})
 }
 
-// --- Admin (AdminController) — AdminPanel.tsx; needs ROLE_ADMIN ---
-
-/** GET /api/admin/overview */
-export async function fetchAdminOverview() {
-  const { data } = await api.get<AdminOverview>('/admin/overview')
-  return data
+export async function fetchAdminApplications(status = 'pending'): Promise<AdminApplication[]> {
+  const { data, error } = await supabase
+    .from('applications')
+    .select('*')
+    .eq('status', status)
+    .order('created_at', { ascending: false })
+  assertNoError(error)
+  return (data ?? []).map(mapAdminApplication)
 }
 
-/** GET /api/admin/applications?status=pending */
-export async function fetchAdminApplications(status = 'pending') {
-  const { data } = await api.get<AdminApplication[]>('/admin/applications', {
-    params: { status },
-  })
-  return data
-}
-
-/** POST /api/admin/applications/{id}/decision — approve creates Loan for user */
 export async function adminDecideApplication(
   id: string,
   decision: 'approve' | 'decline',
   note?: string,
-) {
-  const { data } = await api.post<AdminApplication>(`/admin/applications/${id}/decision`, {
+): Promise<AdminApplication> {
+  return invokeFunction<AdminApplication>('admin-decide-application', {
+    applicationId: id,
     decision,
     note,
   })
-  return data
 }
 
-/** GET /api/admin/loans */
-export async function fetchAdminLoans() {
-  const { data } = await api.get<Loan[]>('/admin/loans')
-  return data
+export async function fetchAdminLoans(): Promise<Loan[]> {
+  const { data, error } = await supabase
+    .from('loans')
+    .select('*, loan_schedule_items(*)')
+    .order('created_at', { ascending: false })
+  assertNoError(error)
+  return (data ?? []).map(mapLoan)
 }
 
-/** GET /api/admin/transfers */
-export async function fetchAdminTransfers() {
-  const { data } = await api.get<AdminTransfer[]>('/admin/transfers')
-  return data
+export async function fetchAdminTransfers(): Promise<AdminTransfer[]> {
+  const { data, error } = await supabase
+    .from('transfers')
+    .select('*')
+    .order('created_at', { ascending: false })
+  assertNoError(error)
+  return (data ?? []).map(mapAdminTransfer)
 }
 
-/** GET /api/admin/debt-reviews */
-export async function fetchAdminDebtReviews() {
-  const { data } = await api.get<AdminDebtReview[]>('/admin/debt-reviews')
-  return data
+export async function fetchAdminDebtReviews(): Promise<AdminDebtReview[]> {
+  const { data, error } = await supabase
+    .from('debt_review_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+  assertNoError(error)
+  return (data ?? []).map(mapAdminDebtReview)
 }

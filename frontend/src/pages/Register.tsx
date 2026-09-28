@@ -50,8 +50,8 @@ export function RegisterPage() {
         phone: values.phone,
       })
       navigate('/apply/details')
-    } catch {
-      setError('Registration failed. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
     } finally {
       setIsLoading(false)
     }

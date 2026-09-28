@@ -1,48 +1,22 @@
 /**
- * Shared Axios instance for all backend calls.
- *
- * LINK MAP
- * - baseURL `/api` is proxied by Vite to Spring Boot :8080.
- * - Request interceptor adds Authorization Bearer token from authStore/hydrateAuth.
- * - 401 response clears session and sends user to /login (pairs with JwtAuthenticationFilter).
- * - Typed wrappers live in apiClient.ts; DTO shapes in apiTypes.ts.
+ * Legacy Axios helpers — kept as thin stubs so older imports do not break.
+ * All API traffic now goes through lib/supabase.ts + lib/apiClient.ts.
  */
 
-import axios from 'axios'
-
-export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api',
-  withCredentials: true,
-})
-
-let accessToken: string | null = null
-
-export function setAccessToken(token: string | null) {
-  accessToken = token
+/** @deprecated Prefer supabase session; token is managed by authStore. */
+export function setAccessToken(_token: string | null) {
+  /* no-op: Supabase client holds the session */
 }
 
-export function getAccessToken() {
-  return accessToken
+/** @deprecated */
+export function getAccessToken(): string | null {
+  return useLazyToken()
 }
 
-api.interceptors.request.use((config) => {
-  if (accessToken) {
-    config.headers.Authorization = `Bearer ${accessToken}`
+function useLazyToken(): string | null {
+  try {
+    return sessionStorage.getItem('tshedza-user') ? 'session' : null
+  } catch {
+    return null
   }
-  return config
-})
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      sessionStorage.removeItem('tshedza-token')
-      sessionStorage.removeItem('tshedza-user')
-      accessToken = null
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = `/login?next=${window.location.pathname}`
-      }
-    }
-    return Promise.reject(error)
-  },
-)
+}

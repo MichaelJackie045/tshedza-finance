@@ -1,2 +1,0 @@
-org.springframework.boot.env.EnvironmentPostProcessor=\
-za.co.tshedza.notify.NotifyEnvPostProcessor
