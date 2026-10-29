@@ -21,12 +21,13 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String subject) {
+    public String generateToken(String subject, String role) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + 3600000L);
 
         return Jwts.builder()
             .subject(subject)
+            .claim("role", role)
             .issuedAt(now)
             .expiration(expiry)
             .signWith(getSigningKey())
@@ -40,6 +41,15 @@ public class JwtTokenProvider {
             .parseSignedClaims(token)
             .getPayload();
         return claims.getSubject();
+    }
+
+    public String getRole(String token) {
+        Claims claims = Jwts.parser()
+            .verifyWith(getSigningKey())
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
+        return claims.get("role", String.class);
     }
 
     public boolean validateToken(String token) {

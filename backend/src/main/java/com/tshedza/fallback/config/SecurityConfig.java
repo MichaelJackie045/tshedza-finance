@@ -36,11 +36,13 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/contact").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/transfers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/debt-review").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/me", "/api/applications/**", "/api/documents", "/api/loans/**", "/api/repayments", "/api/payments/**", "/api/make-repayment").authenticated()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
