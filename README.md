@@ -114,6 +114,25 @@ Do not set `ALLOW_LOCAL_ORIGINS` on the hosted project. That flag is for local `
 
 Security notes: [`SECURITY_RUNBOOK.md`](SECURITY_RUNBOOK.md).
 
+## Java fallback backend
+
+A compact Spring Boot fallback is included under [`backend/`](backend/README.md) for environments where Supabase is unavailable or intentionally bypassed. It is intentionally small, stateless, JWT-secured, and CORS-limited to configured origins.
+
+### Run it locally
+
+```bash
+cd backend
+./mvnw spring-boot:run
+```
+
+Or via Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+The fallback API listens on `http://localhost:8080` and exposes health and auth endpoints.
+
 ## Running Tests
 
 ```bash
