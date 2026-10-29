@@ -1,9 +1,20 @@
-# Tshedza Finance — frontend only (backend is Supabase)
+# Tshedza Finance — primary stack uses Supabase, with a Java fallback backend for resilience.
 # UI: http://localhost:5173
+# Fallback API: http://localhost:8080
 #
-# Set VITE_SUPABASE_* in .env (see frontend/.env.example) before build.
+# Set VITE_SUPABASE_* in .env before building the frontend.
+# For the Java fallback, set JAVA_BACKEND_JWT_SECRET and JAVA_BACKEND_ALLOWED_ORIGINS.
 
 services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      JAVA_BACKEND_JWT_SECRET: ${JAVA_BACKEND_JWT_SECRET:-change-me-to-a-long-random-secret-32-plus-chars}
+      JAVA_BACKEND_ALLOWED_ORIGINS: ${JAVA_BACKEND_ALLOWED_ORIGINS:-http://localhost:5173,https://localhost:5173}
+    ports:
+      - "8080:8080"
+
   frontend:
     build:
       context: ./frontend
@@ -12,3 +23,5 @@ services:
       # Do not pass anon key as build arg; provide at runtime via environment or host secret injection.
     ports:
       - "5173:80"
+    depends_on:
+      - backend
